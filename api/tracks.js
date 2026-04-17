@@ -17,7 +17,7 @@ async function getWebPlayerToken() {
 
 async function fetchTracks(playlistId, access_token) {
   const tracks = [];
-  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&market=US`;
   while (url) {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${access_token}` } });
     if (!r.ok) {

@@ -326,21 +326,20 @@
   <h1>Song Bracket</h1>
   <p class="subtitle">Pick a Spotify playlist and let your songs battle it out in a tournament bracket.</p>
 
+  <button class="btn btn-green" style="font-size:17px;padding:14px 28px;" onclick="showScreen('screen-paste')">Paste Songs from Spotify</button>
+  <p class="url-note" style="margin-top:6px;">Open Spotify desktop → select all songs → Ctrl+C → paste here</p>
+
+  <div class="or-divider">or</div>
+
   <div class="url-row">
     <input id="url-input" type="text" placeholder="Paste a Spotify playlist URL…"
       onkeydown="if(event.key==='Enter') usePlaylistUrl()" />
     <button class="btn btn-green" onclick="usePlaylistUrl()">Load</button>
   </div>
-  <p class="url-note">Public playlists · No login required</p>
 
   <div class="or-divider">or</div>
 
   <button class="btn btn-outline" id="btn-login" onclick="startLogin()">Connect with Spotify</button>
-  <p class="url-note">Access private playlists &amp; your full library</p>
-
-  <div class="or-divider">or</div>
-
-  <button class="btn btn-outline" onclick="showScreen('screen-paste')">Paste songs manually</button>
 
   <div id="login-loading" class="loading hidden mt-20"><div class="spinner"></div>Loading playlist…</div>
   <div id="login-error" class="error-box hidden mt-20"></div>
@@ -349,15 +348,17 @@
 <!-- ======================== PASTE ======================== -->
 <div id="screen-paste" class="screen">
   <h2>Paste Your Songs</h2>
-  <p class="screen-sub">Copy songs from Spotify desktop (or type them in) and paste below.</p>
+  <p class="screen-sub">Copy songs from Spotify and paste them below.</p>
 
   <div class="paste-instructions">
-    <strong>From Spotify desktop app:</strong><br>
-    <div class="step"><span class="step-num">1</span><span>Open your playlist in the Spotify desktop app</span></div>
-    <div class="step"><span class="step-num">2</span><span>Click any song, then press <strong>Ctrl+A</strong> to select all</span></div>
-    <div class="step"><span class="step-num">3</span><span>Press <strong>Ctrl+C</strong> to copy, then paste below</span></div>
+    <strong>From Spotify desktop app (Windows/Mac):</strong><br>
+    <div class="step"><span class="step-num">1</span><span>Open Spotify and go to your playlist</span></div>
+    <div class="step"><span class="step-num">2</span><span>Click any song in the list</span></div>
+    <div class="step"><span class="step-num">3</span><span>Press <strong>Ctrl+A</strong> (or Cmd+A on Mac) to select all songs</span></div>
+    <div class="step"><span class="step-num">4</span><span>Press <strong>Ctrl+C</strong> to copy</span></div>
+    <div class="step"><span class="step-num">5</span><span>Click in the box below and press <strong>Ctrl+V</strong> to paste</span></div>
     <br>
-    <strong>Or just type song names</strong> — one per line. Artist name is optional.
+    <strong>No desktop app?</strong> Just type song names below — one per line.
   </div>
 
   <textarea
