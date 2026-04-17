@@ -755,22 +755,21 @@ async function startBracket() {
   document.getElementById('size-error').classList.add('hidden');
 
   try {
-    if (token) {
-      // Try server-side Client Credentials first — more reliable since Spotify's
-      // 2024 API restrictions cause 403s on OAuth tokens for many playlist types.
-      // Fall back to the user's OAuth token only if server-side can't access it
-      // (e.g. private playlists owned by the user).
+    if (lastTracks && lastTracks.length > 0) {
+      // Tracks already loaded (URL paste or pre-loaded via OAuth playlist screen)
+      buildAndShowBracket(lastTracks);
+    } else if (selectedPlaylist.id && selectedPlaylist.id !== 'paste') {
+      // Need to fetch — try server-side first, fall back to OAuth token
       let tracks;
       try {
         tracks = await fetchTracksServerSide(selectedPlaylist.id);
       } catch (serverErr) {
-        // Server-side failed — fall back to OAuth token
+        if (!token) throw serverErr;
         tracks = await fetchTracksWithToken(selectedPlaylist.id);
       }
       lastTracks = tracks;
       buildAndShowBracket(tracks);
     } else {
-      // Tracks already pre-loaded (playlist URL or paste mode)
       buildAndShowBracket(lastTracks);
     }
   } catch (e) {
