@@ -705,18 +705,43 @@ function selectSize(n) {
 async function fetchTracks(playlistId) {
   const tracks = [];
   let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,artists,album(images)))`;
+
   while (url) {
-    const d = await api(url);
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+
+    if (res.status === 403 || res.status === 404) {
+      // Spotify-generated playlists (Discover Weekly, Daily Mix, etc.) often
+      // return 403 via user token. Fall back to server-side Client Credentials.
+      if (tracks.length === 0) {
+        const fallback = await fetch(`/api/playlist?playlistId=${playlistId}`);
+        if (fallback.ok) {
+          const data = await fallback.json();
+          return data.tracks;
+        }
+      }
+      throw new Error(`Spotify returned ${res.status} — this playlist may be private or restricted.`);
+    }
+
+    if (res.status === 401) {
+      sessionStorage.clear();
+      showScreen('screen-login');
+      throw new Error('Session expired.');
+    }
+
+    if (!res.ok) throw new Error('Spotify error ' + res.status);
+
+    const d = await res.json();
     d.items.forEach(item => {
       if (item?.track?.id) tracks.push({
-        id: item.track.id,
-        name: item.track.name,
+        id:     item.track.id,
+        name:   item.track.name,
         artist: item.track.artists.map(a => a.name).join(', '),
-        art: item.track.album?.images?.[0]?.url || null,
+        art:    item.track.album?.images?.[0]?.url || null,
       });
     });
     url = d.next;
   }
+
   return tracks;
 }
 
