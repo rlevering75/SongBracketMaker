@@ -645,7 +645,7 @@ function renderPlaylists(playlists) {
     card.addEventListener('click', () => {
       document.querySelectorAll('.playlist-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
-      const total = pl.tracks?.total ?? 0;
+      const total = pl.tracks?.total ?? null; // null = unknown count
       selectedPlaylist = { id: pl.id, name: pl.name, total };
       showScreen('screen-size');
       setupSizeCards(total);
@@ -658,14 +658,17 @@ function renderPlaylists(playlists) {
 // SIZE SELECTION
 // ================================================================
 function setupSizeCards(total) {
+  // total === null means count is unknown (some Spotify playlists don't report it)
+  // In that case allow everything — we'll validate when tracks are actually fetched
+  const known = total !== null;
+
   selectedSize = null;
   document.getElementById('btn-start').disabled = true;
 
   [16, 32, 64].forEach(n => {
     const card = document.getElementById('size-card-' + n);
-    // remove old need-more notes
     card.querySelector('.need-more')?.remove();
-    const ok = total >= n;
+    const ok = !known || total >= n;
     if (!ok) {
       card.classList.add('disabled');
       card.onclick = null;
@@ -680,14 +683,15 @@ function setupSizeCards(total) {
     card.classList.remove('selected');
   });
 
-  // Auto-select best available
+  // Auto-select largest available
   for (const n of [16, 32, 64]) {
-    if (total >= n) selectSize(n);
+    if (!known || total >= n) selectSize(n);
   }
 }
 
 function selectSize(n) {
-  if (!selectedPlaylist || selectedPlaylist.total < n) return;
+  if (!selectedPlaylist) return;
+  if (selectedPlaylist.total !== null && selectedPlaylist.total < n) return;
   selectedSize = n;
   [16, 32, 64].forEach(s => {
     document.getElementById('size-card-' + s).classList.toggle('selected', s === n);
@@ -745,6 +749,13 @@ async function startBracket() {
 }
 
 function buildAndShowBracket(tracks) {
+  if (tracks.length < selectedSize) {
+    const err = document.getElementById('size-error');
+    err.textContent = `This playlist only has ${tracks.length} songs — not enough for a ${selectedSize}-song bracket. Pick a smaller size.`;
+    err.classList.remove('hidden');
+    showScreen('screen-size');
+    return;
+  }
   const chosen = shuffle([...tracks]).slice(0, selectedSize);
   bracketData = buildBracket(chosen);
   document.getElementById('bracket-title').textContent = selectedPlaylist.name;
