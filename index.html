@@ -585,7 +585,10 @@ async function usePlaylistUrl() {
     showScreen('screen-size');
     setupSizeCards(data.total);
   } catch (e) {
-    showLoginError(e.message);
+    const msg = e.message.includes('403') || e.message.includes('Forbidden')
+      ? 'Could not access playlist via server (Spotify 403). Try clicking "Connect with Spotify" and logging in — your user token will work for your own playlists.'
+      : e.message;
+    showLoginError(msg);
   } finally {
     document.getElementById('login-loading').classList.add('hidden');
   }
@@ -756,17 +759,16 @@ async function startBracket() {
 
   try {
     if (lastTracks && lastTracks.length > 0) {
-      // Tracks already loaded (URL paste or pre-loaded via OAuth playlist screen)
+      // Tracks already loaded — use them directly
       buildAndShowBracket(lastTracks);
+    } else if (token && selectedPlaylist.id && selectedPlaylist.id !== 'paste') {
+      // OAuth flow: use the user's own token — most reliable for their playlists
+      const tracks = await fetchTracksWithToken(selectedPlaylist.id);
+      lastTracks = tracks;
+      buildAndShowBracket(tracks);
     } else if (selectedPlaylist.id && selectedPlaylist.id !== 'paste') {
-      // Need to fetch — try server-side first, fall back to OAuth token
-      let tracks;
-      try {
-        tracks = await fetchTracksServerSide(selectedPlaylist.id);
-      } catch (serverErr) {
-        if (!token) throw serverErr;
-        tracks = await fetchTracksWithToken(selectedPlaylist.id);
-      }
+      // URL paste flow (no OAuth): use server-side Client Credentials
+      const tracks = await fetchTracksServerSide(selectedPlaylist.id);
       lastTracks = tracks;
       buildAndShowBracket(tracks);
     } else {
