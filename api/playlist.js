@@ -40,6 +40,8 @@ export async function GET(req) {
     const body = await metaRes.json().catch(() => ({}));
     const msg = metaRes.status === 404
       ? "Playlist not found. Make sure it's set to Public in Spotify."
+      : metaRes.status === 403
+      ? `Playlist is private or restricted (Spotify 403). Open the playlist in Spotify → ··· menu → Share → set to Public, then try again. Raw: ${body?.error?.message || 'Forbidden'}`
       : `Spotify ${metaRes.status}: ${body?.error?.message || 'unknown error'}`;
     return Response.json({ error: msg }, { status: metaRes.status });
   }
