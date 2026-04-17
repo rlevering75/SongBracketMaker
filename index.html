@@ -640,14 +640,15 @@ function renderPlaylists(playlists) {
     card.innerHTML = `
       ${img ? `<img class="playlist-img" src="${esc(img)}" alt="">` : `<div class="playlist-img-placeholder">♪</div>`}
       <div class="playlist-name">${esc(pl.name)}</div>
-      <div class="playlist-count">${pl.tracks.total} songs</div>
+      <div class="playlist-count">${pl.tracks?.total ?? '?'} songs</div>
     `;
     card.addEventListener('click', () => {
       document.querySelectorAll('.playlist-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
-      selectedPlaylist = { id: pl.id, name: pl.name, total: pl.tracks.total };
+      const total = pl.tracks?.total ?? 0;
+      selectedPlaylist = { id: pl.id, name: pl.name, total };
       showScreen('screen-size');
-      setupSizeCards(pl.tracks.total);
+      setupSizeCards(total);
     });
     grid.appendChild(card);
   });
