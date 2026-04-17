@@ -349,7 +349,7 @@
     id="paste-textarea"
     class="paste-area"
     placeholder="Song Name&#10;Another Song&#10;Third Song — Artist&#10;…"
-    oninput="onPasteInput()"
+    oninput="onPasteInput().catch(console.error)"
   ></textarea>
   <div id="parse-count" class="parse-count"></div>
 
@@ -1032,67 +1032,62 @@ function esc(s) {
 // PASTE MODE
 // ================================================================
 let pasteMode = false;
+let resolvedPasteSongs = [];
 
-function parsePastedSongs(text) {
-  const songs = [];
-  const seen = new Set();
-
-  text.split('\n').forEach(raw => {
-    const line = raw.trim();
-    if (!line) return;
-
-    // Spotify desktop copy format (tab-separated):
-    // Track Name \t Artist \t Album \t Duration
-    // Sometimes has a leading # column or other columns — we look for the first two non-empty tab fields
-    const tabs = line.split('\t').map(s => s.trim()).filter(Boolean);
-
-    let name = '', artist = '';
-
-    if (tabs.length >= 2) {
-      // Spotify desktop: first field = song name, second = artist
-      // Skip if first field looks like a number (track index column)
-      if (/^\d+$/.test(tabs[0]) && tabs.length >= 3) {
-        name   = tabs[1];
-        artist = tabs[2];
-      } else {
-        name   = tabs[0];
-        artist = tabs[1];
-      }
-    } else {
-      // Plain text — may have " — " or " - " as artist separator
-      const dashMatch = line.match(/^(.+?)\s+[—–-]\s+(.+)$/);
-      if (dashMatch) {
-        name   = dashMatch[1].trim();
-        artist = dashMatch[2].trim();
-      } else {
-        name   = line;
-        artist = '';
-      }
-    }
-
-    // Skip blank, header rows, or obviously non-song lines
-    if (!name || name.toLowerCase() === 'title' || name.toLowerCase() === '#') return;
-    // Skip duration-only or short numeric strings
-    if (/^\d+:\d+$/.test(name)) return;
-
-    const key = name.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-
-    songs.push({
-      id: 'paste-' + songs.length + '-' + Math.random().toString(36).slice(2),
-      name,
-      artist,
-      art: null,
-    });
-  });
-
-  return songs;
+// Extract Spotify track URL/URI from a line
+function extractSpotifyUrl(line) {
+  // https://open.spotify.com/track/ID or with ?si=...
+  const webMatch = line.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+  if (webMatch) return `https://open.spotify.com/track/${webMatch[1]}`;
+  // spotify:track:ID
+  const uriMatch = line.match(/^spotify:track:([a-zA-Z0-9]+)/);
+  if (uriMatch) return `https://open.spotify.com/track/${uriMatch[1]}`;
+  return null;
 }
 
-function onPasteInput() {
+// Parse a plain-text line into a song object (no URL)
+function parseTextLine(line) {
+  if (!line) return null;
+  const tabs = line.split('\t').map(s => s.trim()).filter(Boolean);
+  let name = '', artist = '';
+
+  if (tabs.length >= 2) {
+    if (/^\d+$/.test(tabs[0]) && tabs.length >= 3) {
+      name = tabs[1]; artist = tabs[2];
+    } else {
+      name = tabs[0]; artist = tabs[1];
+    }
+  } else {
+    const dashMatch = line.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+    if (dashMatch) { name = dashMatch[1].trim(); artist = dashMatch[2].trim(); }
+    else { name = line; artist = ''; }
+  }
+
+  if (!name || name.toLowerCase() === 'title' || name.toLowerCase() === '#') return null;
+  if (/^\d+:\d+$/.test(name)) return null;
+  return { name, artist };
+}
+
+// Resolve a Spotify URL to song name via oEmbed (no auth needed)
+async function resolveSpotifyOembed(url) {
+  try {
+    const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // oEmbed title is the track name; thumbnail_url is album art
+    return {
+      id: 'spotify-' + url.split('/').pop(),
+      name: data.title,
+      artist: '',
+      art: data.thumbnail_url || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function onPasteInput() {
   const text = document.getElementById('paste-textarea').value;
-  const songs = parsePastedSongs(text);
   const countEl = document.getElementById('parse-count');
   const btn = document.getElementById('btn-paste-next');
 
@@ -1100,31 +1095,67 @@ function onPasteInput() {
     countEl.textContent = '';
     countEl.className = 'parse-count';
     btn.disabled = true;
+    resolvedPasteSongs = [];
     return;
   }
 
-  if (songs.length < 16) {
-    countEl.textContent = `${songs.length} songs found — need at least 16`;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const spotifyUrls = [];
+  const textSongs = [];
+  const seen = new Set();
+
+  lines.forEach(line => {
+    const url = extractSpotifyUrl(line);
+    if (url) {
+      if (!seen.has(url)) { seen.add(url); spotifyUrls.push(url); }
+    } else {
+      const song = parseTextLine(line);
+      if (song) {
+        const key = song.name.toLowerCase();
+        if (!seen.has(key)) { seen.add(key); textSongs.push(song); }
+      }
+    }
+  });
+
+  // If there are Spotify URLs, resolve them via oEmbed
+  if (spotifyUrls.length > 0) {
+    countEl.textContent = `Resolving ${spotifyUrls.length} Spotify link${spotifyUrls.length > 1 ? 's' : ''}…`;
+    countEl.className = 'parse-count';
+    btn.disabled = true;
+
+    const resolved = await Promise.all(spotifyUrls.map(resolveSpotifyOembed));
+    const validResolved = resolved.filter(Boolean);
+
+    resolvedPasteSongs = [...textSongs.map((s, i) => ({
+      ...s, id: 'paste-' + i + '-' + Math.random().toString(36).slice(2), art: null
+    })), ...validResolved];
+  } else {
+    resolvedPasteSongs = textSongs.map((s, i) => ({
+      ...s, id: 'paste-' + i + '-' + Math.random().toString(36).slice(2), art: null
+    }));
+  }
+
+  const count = resolvedPasteSongs.length;
+  if (count < 16) {
+    countEl.textContent = `${count} song${count !== 1 ? 's' : ''} found — need at least 16`;
     countEl.className = 'parse-count warn';
     btn.disabled = true;
   } else {
-    countEl.textContent = `${songs.length} songs found ✓`;
+    countEl.textContent = `${count} songs found ✓`;
     countEl.className = 'parse-count ok';
     btn.disabled = false;
   }
 }
 
 function usePastedSongs() {
-  const text = document.getElementById('paste-textarea').value;
-  const songs = parsePastedSongs(text);
-  if (songs.length < 16) return;
+  if (resolvedPasteSongs.length < 16) return;
 
   pasteMode = true;
-  lastTracks = songs;
-  selectedPlaylist = { id: 'paste', name: 'Pasted Songs', total: songs.length };
+  lastTracks = resolvedPasteSongs;
+  selectedPlaylist = { id: 'paste', name: 'Pasted Songs', total: resolvedPasteSongs.length };
   document.getElementById('header-playlist').textContent = 'Pasted Songs';
   showScreen('screen-size');
-  setupSizeCards(songs.length);
+  setupSizeCards(resolvedPasteSongs.length);
 }
 </script>
 </body>
