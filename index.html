@@ -247,6 +247,21 @@
     .mt-12 { margin-top: 12px; }
     .mt-20 { margin-top: 20px; }
 
+    /* ===== URL INPUT ===== */
+    .url-row {
+      display: flex; gap: 10px; width: 100%; max-width: 420px;
+    }
+    .url-row input {
+      flex: 1; padding: 12px 14px;
+      background: #1a1a1a; border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 14px; outline: none;
+      transition: border-color 0.15s;
+    }
+    .url-row input:focus { border-color: var(--green); }
+    .url-row input::placeholder { color: #444; }
+    .url-row .btn { padding: 12px 22px; }
+    .url-note { font-size: 12px; color: #555; margin-top: 6px; }
+
     /* ===== PASTE SCREEN ===== */
     #screen-paste { padding: 36px 24px; }
     #screen-paste h2 { font-size: 26px; font-weight: 800; margin-bottom: 6px; }
@@ -309,25 +324,25 @@
 <div id="screen-login" class="screen active">
   <div class="hero">🎵</div>
   <h1>Song Bracket</h1>
-  <p class="subtitle">Pick a Spotify playlist, choose a size, and let your songs battle it out in a tournament bracket.</p>
-  <button class="btn btn-green" id="btn-login" onclick="startLogin()">Connect with Spotify</button>
+  <p class="subtitle">Pick a Spotify playlist and let your songs battle it out in a tournament bracket.</p>
+
+  <div class="url-row">
+    <input id="url-input" type="text" placeholder="Paste a Spotify playlist URL…"
+      onkeydown="if(event.key==='Enter') usePlaylistUrl()" />
+    <button class="btn btn-green" onclick="usePlaylistUrl()">Load</button>
+  </div>
+  <p class="url-note">Public playlists · No login required</p>
+
+  <div class="or-divider">or</div>
+
+  <button class="btn btn-outline" id="btn-login" onclick="startLogin()">Connect with Spotify</button>
+  <p class="url-note">Access private playlists &amp; your full library</p>
 
   <div class="or-divider">or</div>
 
   <button class="btn btn-outline" onclick="showScreen('screen-paste')">Paste songs manually</button>
 
-  <div id="config-box" class="config-box hidden">
-    <strong>Setup required</strong><br>
-    You need a Spotify Developer Client ID to use this app:<br><br>
-    1. Visit <a href="https://developer.spotify.com/dashboard" target="_blank">developer.spotify.com/dashboard</a><br>
-    2. Create an app &amp; add this Redirect URI:<br>
-    &nbsp;&nbsp;&nbsp;<code id="uri-display"></code><br>
-    3. Paste your Client ID below:
-    <div class="client-id-row">
-      <input id="client-id-input" type="text" placeholder="Paste Client ID here…" />
-      <button class="btn btn-green" onclick="saveClientId()">Save</button>
-    </div>
-  </div>
+  <div id="login-loading" class="loading hidden mt-20"><div class="spinner"></div>Loading playlist…</div>
   <div id="login-error" class="error-box hidden mt-20"></div>
 </div>
 
@@ -424,7 +439,6 @@
 // ================================================================
 // CONFIG
 // ================================================================
-const CLIENT_ID_KEY = 'sb_client_id';
 const SCOPES = 'playlist-read-private playlist-read-collaborative';
 const REDIRECT_URI = (() => {
   const u = window.location.href;
@@ -435,6 +449,7 @@ const REDIRECT_URI = (() => {
 // STATE
 // ================================================================
 let token = null;
+let serverClientId = '';   // loaded from /api/config on init
 let selectedPlaylist = null;
 let selectedSize = null;
 let bracketData = null;
@@ -453,7 +468,11 @@ function matchGap(r) { return Math.pow(2, r) * UNIT - MATCH_H; }
 // INIT
 // ================================================================
 window.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('uri-display').textContent = REDIRECT_URI;
+  // Load client ID from server (non-blocking — falls back gracefully if unavailable)
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    serverClientId = cfg.clientId || '';
+  } catch {}
 
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
@@ -487,23 +506,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  if (!getClientId()) {
-    document.getElementById('config-box').classList.remove('hidden');
-  }
   showScreen('screen-login');
 });
 
 // ================================================================
 // CLIENT ID
 // ================================================================
-function getClientId() { return localStorage.getItem(CLIENT_ID_KEY) || ''; }
-
-function saveClientId() {
-  const val = document.getElementById('client-id-input').value.trim();
-  if (!val) return;
-  localStorage.setItem(CLIENT_ID_KEY, val);
-  document.getElementById('config-box').classList.add('hidden');
-}
+function getClientId() { return serverClientId; }
 
 // ================================================================
 // PKCE OAUTH
@@ -523,7 +532,7 @@ async function sha256(s) {
 
 async function startLogin() {
   const id = getClientId();
-  if (!id) { document.getElementById('config-box').classList.remove('hidden'); return; }
+  if (!id) { showLoginError('Spotify login is not configured on this deployment.'); return; }
   const verifier = randomStr(128);
   const challenge = await sha256(verifier);
   sessionStorage.setItem('pkce_verifier', verifier);
@@ -549,6 +558,40 @@ async function exchangeCode(code, verifier) {
 }
 
 // ================================================================
+// PLAYLIST URL LOADER (no login — uses server-side Client Credentials)
+// ================================================================
+async function usePlaylistUrl() {
+  const input = document.getElementById('url-input').value.trim();
+
+  // Accept full URLs or bare IDs
+  const match = input.match(/playlist\/([a-zA-Z0-9]+)/) || (input.match(/^[a-zA-Z0-9]{22}$/) ? [null, input] : null);
+  if (!match) {
+    showLoginError('Please paste a valid Spotify playlist URL (e.g. open.spotify.com/playlist/…)');
+    return;
+  }
+  const playlistId = match[1];
+
+  document.getElementById('login-error').classList.add('hidden');
+  document.getElementById('login-loading').classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/api/playlist?playlistId=${playlistId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load playlist');
+
+    lastTracks = data.tracks;
+    selectedPlaylist = { id: playlistId, name: data.name, total: data.total };
+    document.getElementById('header-playlist').textContent = data.name;
+    showScreen('screen-size');
+    setupSizeCards(data.total);
+  } catch (e) {
+    showLoginError(e.message);
+  } finally {
+    document.getElementById('login-loading').classList.add('hidden');
+  }
+}
+
+// ================================================================
 // SPOTIFY API
 // ================================================================
 async function api(url) {
@@ -562,7 +605,7 @@ async function api(url) {
 // PLAYLISTS
 // ================================================================
 async function loadPlaylists() {
-  pasteMode = false;
+  lastTracks = [];
   showScreen('screen-playlists');
   const loadEl = document.getElementById('playlist-loading');
   const errEl  = document.getElementById('playlist-error');
@@ -682,12 +725,14 @@ async function startBracket() {
   document.getElementById('size-error').classList.add('hidden');
 
   try {
-    if (pasteMode) {
-      buildAndShowBracket(lastTracks);
-    } else {
+    if (token) {
+      // Logged in via OAuth — fetch directly from Spotify
       const tracks = await fetchTracks(selectedPlaylist.id);
       lastTracks = tracks;
       buildAndShowBracket(tracks);
+    } else {
+      // Tracks already pre-loaded (playlist URL or paste mode)
+      buildAndShowBracket(lastTracks);
     }
   } catch (e) {
     const err = document.getElementById('size-error');
@@ -1031,7 +1076,6 @@ function esc(s) {
 // ================================================================
 // PASTE MODE
 // ================================================================
-let pasteMode = false;
 let resolvedPasteSongs = [];
 
 // Extract Spotify track URL/URI from a line
@@ -1150,7 +1194,6 @@ async function onPasteInput() {
 function usePastedSongs() {
   if (resolvedPasteSongs.length < 16) return;
 
-  pasteMode = true;
   lastTracks = resolvedPasteSongs;
   selectedPlaylist = { id: 'paste', name: 'Pasted Songs', total: resolvedPasteSongs.length };
   document.getElementById('header-playlist').textContent = 'Pasted Songs';
