@@ -702,6 +702,23 @@ function selectSize(n) {
 // ================================================================
 // FETCH TRACKS
 // ================================================================
+// Returns tracks array on success, null if playlist is inaccessible server-side (e.g. private)
+async function fetchTracksServerSide(playlistId) {
+  try {
+    const res = await fetch(`/api/playlist?playlistId=${playlistId}`);
+    if (res.ok) {
+      const data = await res.json();
+      return data.tracks;
+    }
+    if (res.status === 404 || res.status === 403) return null; // private — caller will use OAuth token
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Server error ${res.status}`);
+  } catch (e) {
+    if (e.message.includes('private') || e.message.includes('not found')) return null;
+    throw e;
+  }
+}
+
 async function fetchTracks(playlistId) {
   const tracks = [];
   let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,artists,album(images)))`;
@@ -756,8 +773,14 @@ async function startBracket() {
 
   try {
     if (token) {
-      // Logged in via OAuth — fetch directly from Spotify
-      const tracks = await fetchTracks(selectedPlaylist.id);
+      // Try server-side Client Credentials first — more reliable since Spotify's
+      // 2024 API restrictions cause 403s on OAuth tokens for many playlist types.
+      // Fall back to the user's OAuth token only if server-side can't access it
+      // (e.g. private playlists owned by the user).
+      let tracks = await fetchTracksServerSide(selectedPlaylist.id);
+      if (tracks === null) {
+        tracks = await fetchTracks(selectedPlaylist.id);
+      }
       lastTracks = tracks;
       buildAndShowBracket(tracks);
     } else {
