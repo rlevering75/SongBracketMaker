@@ -1184,15 +1184,16 @@ async function onPasteInput() {
     return;
   }
 
+  const MAX_SAMPLE = 64;
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const spotifyUrls = [];
+  const allUrls = [];
   const textSongs = [];
   const seen = new Set();
 
   lines.forEach(line => {
     const url = extractSpotifyUrl(line);
     if (url) {
-      if (!seen.has(url)) { seen.add(url); spotifyUrls.push(url); }
+      if (!seen.has(url)) { seen.add(url); allUrls.push(url); }
     } else {
       const song = parseTextLine(line);
       if (song) {
@@ -1202,13 +1203,19 @@ async function onPasteInput() {
     }
   });
 
-  // If there are Spotify URLs, resolve them via oEmbed (batched to avoid rate limiting)
-  if (spotifyUrls.length > 0) {
-    countEl.textContent = `Resolving 0 / ${spotifyUrls.length}…`;
+  // Randomly sample up to 64 URLs so we only resolve what we need
+  const shuffled = allUrls.sort(() => Math.random() - 0.5);
+  const sampled = shuffled.slice(0, MAX_SAMPLE);
+
+  if (sampled.length > 0) {
+    const totalLabel = allUrls.length > MAX_SAMPLE
+      ? `${MAX_SAMPLE} random songs from ${allUrls.length}`
+      : `${sampled.length}`;
+    countEl.textContent = `Resolving ${totalLabel}…`;
     countEl.className = 'parse-count';
     btn.disabled = true;
 
-    const resolved = await batchResolveOembed(spotifyUrls, (done, total) => {
+    const resolved = await batchResolveOembed(sampled, (done, total) => {
       countEl.textContent = `Resolving ${done} / ${total}…`;
     });
     const validResolved = resolved.filter(Boolean);
