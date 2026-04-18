@@ -221,7 +221,7 @@
     .bracket-center { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
 
     /* Winner column slot */
-    .winner-slot-wrap { display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
+    .winner-slot-wrap { display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; }
     #winner-display-slot {
       width: 220px; margin: 0 2px; padding: 0 11px; height: 48px;
       background: rgba(29,185,84,0.14); border: 2px solid var(--green);
@@ -835,8 +835,8 @@ function renderBracket() {
   container.appendChild(makeConnectorSpacer());
   const center = document.createElement('div');
   center.className = 'bracket-center';
-  center.appendChild(makeRoundEl(rounds[finalR], finalR, numRounds, false, 0));
   center.appendChild(makeWinnerSlot());
+  center.appendChild(makeRoundEl(rounds[finalR], finalR, numRounds, false, 0));
   container.appendChild(center);
   container.appendChild(makeConnectorSpacer());
 
