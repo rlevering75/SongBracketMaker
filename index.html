@@ -177,15 +177,15 @@
     .round-body { display: flex; flex-direction: column; }
     .match-spacer { display: flex; flex-direction: column; }
 
-    .match { display: flex; flex-direction: column; width: 210px; margin: 0 2px; position: relative; }
+    .match { display: flex; flex-direction: column; width: 220px; margin: 0 2px; position: relative; }
 
     .song-slot {
-      padding: 0 11px; height: 40px;
+      padding: 0 8px; height: 48px;
       background: var(--card); border: 1px solid var(--border);
-      display: flex; align-items: center;
-      font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12.5px;
       transition: background 0.12s, border-color 0.12s;
-      cursor: pointer; user-select: none; position: relative; z-index: 1;
+      cursor: pointer; user-select: none; position: relative; z-index: 1; overflow: hidden;
     }
     .song-slot:first-child { border-radius: 5px 5px 0 0; }
     .song-slot:last-child { border-radius: 0 0 5px 5px; border-top: none; }
@@ -203,23 +203,34 @@
     .song-slot.empty { color: #555; cursor: default; font-style: italic; font-size: 12px; }
     .song-slot.tbd { color: #555; cursor: default; font-size: 12px; }
 
-    .seed { font-size: 10px; color: #555; margin-right: 7px; flex-shrink: 0; }
+    .slot-art { width: 36px; height: 36px; border-radius: 3px; object-fit: cover; flex-shrink: 0; display: block; }
+    .slot-art-placeholder { width: 36px; height: 36px; border-radius: 3px; background: #2a2a2a; flex-shrink: 0; }
+    .slot-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+    .seed { font-size: 10px; color: #555; margin-right: 3px; flex-shrink: 0; }
 
-    /* Final match border pulse when both slots filled */
-    .match.ready .song-slot:not(.winner):not(.loser):not(.empty) {
-      cursor: pointer;
-    }
+    /* Right-side rounds: mirror slot content */
+    .round-right .song-slot { flex-direction: row-reverse; }
+    .round-right .slot-name { text-align: right; }
+
+    .match.ready .song-slot:not(.winner):not(.loser):not(.empty) { cursor: pointer; }
+
+    /* March Madness two-sided layout */
+    .bracket-half { display: flex; align-items: flex-start; }
+    .bracket-half-left { flex-direction: row; }
+    .bracket-half-right { flex-direction: row-reverse; }
+    .bracket-center { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
 
     /* Winner column slot */
-    .winner-slot-wrap { display: flex; flex-direction: column; flex-shrink: 0; }
+    .winner-slot-wrap { display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
     #winner-display-slot {
-      width: 210px; margin: 0 2px; padding: 0 11px; height: 40px;
+      width: 220px; margin: 0 2px; padding: 0 11px; height: 48px;
       background: rgba(29,185,84,0.14); border: 2px solid var(--green);
-      border-radius: 5px; display: flex; align-items: center;
-      font-size: 12.5px; font-weight: 700; color: var(--green);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border-radius: 5px; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: var(--green);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
     }
     #winner-display-slot.empty { color: #444; border-color: var(--border); background: var(--card); font-style: italic; font-size: 12px; font-weight: 400; }
+    .champion-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; margin-top: 6px; }
 
     /* SVG connector lines */
     .bracket svg.connectors { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
@@ -457,10 +468,10 @@ let bracketData = null;
 let lastTracks = [];
 
 // Bracket geometry constants
-const SLOT_H = 40;      // px — keep in sync with CSS .song-slot height
-const MATCH_H = SLOT_H * 2; // 80px
+const SLOT_H = 48;      // px — keep in sync with CSS .song-slot height
+const MATCH_H = SLOT_H * 2; // 96px
 const BASE_GAP = 8;     // gap between matches in round 0
-const UNIT = MATCH_H + BASE_GAP; // 88px
+const UNIT = MATCH_H + BASE_GAP; // 104px
 
 function topPad(r)   { return (Math.pow(2, r) - 1) * UNIT / 2; }
 function matchGap(r) { return Math.pow(2, r) * UNIT - MATCH_H; }
@@ -801,26 +812,45 @@ function buildBracket(songs) {
 }
 
 // ================================================================
-// RENDER BRACKET
+// RENDER BRACKET  (March Madness two-sided layout)
 // ================================================================
 function renderBracket() {
   const container = document.getElementById('bracket');
   container.innerHTML = '';
 
   const { rounds, numRounds } = bracketData;
+  const finalR = numRounds - 1;
 
-  rounds.forEach((matches, r) => {
-    if (r > 0) container.appendChild(makeConnectorSpacer());
-    container.appendChild(makeRoundEl(matches, r, numRounds));
-  });
+  // Left half: rounds 0…finalR-1, first half of matches each
+  const leftHalf = document.createElement('div');
+  leftHalf.className = 'bracket-half bracket-half-left';
+  for (let r = 0; r < finalR; r++) {
+    if (r > 0) leftHalf.appendChild(makeConnectorSpacer());
+    const half = rounds[r].length / 2;
+    leftHalf.appendChild(makeRoundEl(rounds[r].slice(0, half), r, numRounds, false, 0));
+  }
+  container.appendChild(leftHalf);
 
-  // Winner column
+  // Center: spacer + final round + champion
   container.appendChild(makeConnectorSpacer());
-  container.appendChild(makeWinnerCol());
+  const center = document.createElement('div');
+  center.className = 'bracket-center';
+  center.appendChild(makeRoundEl(rounds[finalR], finalR, numRounds, false, 0));
+  center.appendChild(makeWinnerSlot());
+  container.appendChild(center);
+  container.appendChild(makeConnectorSpacer());
 
-  // Draw SVG connectors after layout
+  // Right half: rounds finalR-1…0 (reversed), second half of matches
+  const rightHalf = document.createElement('div');
+  rightHalf.className = 'bracket-half bracket-half-right';
+  for (let r = finalR - 1; r >= 0; r--) {
+    const half = rounds[r].length / 2;
+    rightHalf.appendChild(makeRoundEl(rounds[r].slice(half), r, numRounds, true, half));
+    if (r > 0) rightHalf.appendChild(makeConnectorSpacer());
+  }
+  container.appendChild(rightHalf);
+
   requestAnimationFrame(() => drawConnectors());
-
   updateProgress();
 }
 
@@ -830,11 +860,10 @@ function makeConnectorSpacer() {
   return d;
 }
 
-function makeRoundEl(matches, r, numRounds) {
+function makeRoundEl(matches, r, numRounds, isRight, startIdx) {
   const roundEl = document.createElement('div');
-  roundEl.className = 'round';
+  roundEl.className = 'round' + (isRight ? ' round-right' : '');
 
-  const labels = ['Round 1','Round 2','Round 3','Round 4','Round 5','Quarterfinals','Semifinals','Final'];
   let label;
   if (r === numRounds - 1)      label = 'Final';
   else if (r === numRounds - 2) label = 'Semifinals';
@@ -849,12 +878,13 @@ function makeRoundEl(matches, r, numRounds) {
   const tp = topPad(r);
   const mg = matchGap(r);
 
-  matches.forEach((match, idx) => {
+  matches.forEach((match, i) => {
+    const idx = startIdx + i;
     const spacer = document.createElement('div');
     spacer.className = 'match-spacer';
-    spacer.style.paddingTop = (idx === 0 ? tp : mg) + 'px';
+    spacer.style.paddingTop = (i === 0 ? tp : mg) + 'px';
 
-    const matchEl = makeMatchEl(match, r, idx);
+    const matchEl = makeMatchEl(match, r, idx, isRight);
     spacer.appendChild(matchEl);
     body.appendChild(spacer);
   });
@@ -864,7 +894,7 @@ function makeRoundEl(matches, r, numRounds) {
   return roundEl;
 }
 
-function makeMatchEl(match, r, idx) {
+function makeMatchEl(match, r, idx, isRight = false) {
   const el = document.createElement('div');
   el.className = 'match';
   if (match.song1 && match.song2 && !match.winner) el.classList.add('ready');
@@ -882,13 +912,19 @@ function makeSlot(song, match, slotNum, r, idx) {
 
   if (!song) {
     slot.classList.add(r === 0 ? 'empty' : 'tbd');
-    slot.innerHTML = r === 0 ? '<span class="seed">' + ((idx * 2 + slotNum)) + '</span>TBD' : '–';
+    const seedNum = idx * 2 + slotNum;
+    slot.innerHTML = r === 0
+      ? `<div class="slot-art-placeholder"></div><span class="seed">${seedNum}</span><span class="slot-name">TBD</span>`
+      : `<span class="slot-name">–</span>`;
     return slot;
   }
 
-  const seedNum = r === 0 ? (idx * 2 + slotNum) : '';
-  slot.innerHTML = `${r === 0 ? `<span class="seed">${seedNum}</span>` : ''}${esc(song.name)}`;
-  slot.title = song.name + ' — ' + song.artist;
+  const artHtml = song.art
+    ? `<img class="slot-art" src="${esc(song.art)}" loading="lazy" onerror="this.outerHTML='<div class=slot-art-placeholder></div>'">`
+    : `<div class="slot-art-placeholder"></div>`;
+  const seedHtml = r === 0 ? `<span class="seed">${idx * 2 + slotNum}</span>` : '';
+  slot.innerHTML = `${artHtml}${seedHtml}<span class="slot-name">${esc(song.name)}</span>`;
+  slot.title = song.name + (song.artist ? ' — ' + song.artist : '');
 
   if (match.winner) {
     slot.classList.add(match.winner.id === song.id ? 'winner' : 'loser');
@@ -902,32 +938,23 @@ function makeSlot(song, match, slotNum, r, idx) {
   return slot;
 }
 
-function makeWinnerCol() {
-  const col = document.createElement('div');
-  col.className = 'round winner-slot-wrap';
-  col.innerHTML = '<div class="round-label">🏆 Winner</div>';
-
-  const body = document.createElement('div');
-  body.className = 'round-body';
-
-  // Center the winner slot vertically
-  const totalH = bracketData.rounds[0].length * MATCH_H + (bracketData.rounds[0].length - 1) * BASE_GAP;
-  const tp = (totalH - SLOT_H) / 2;
-
-  const spacer = document.createElement('div');
-  spacer.className = 'match-spacer';
-  spacer.style.paddingTop = tp + 'px';
+function makeWinnerSlot() {
+  const wrap = document.createElement('div');
+  wrap.className = 'winner-slot-wrap';
 
   const slot = document.createElement('div');
   slot.id = 'winner-display-slot';
-  slot.className = 'empty';
-  slot.textContent = 'TBD';
+  const finalWinner = bracketData.rounds[bracketData.rounds.length - 1][0].winner;
+  slot.className = finalWinner ? '' : 'empty';
+  slot.textContent = finalWinner ? finalWinner.name : 'TBD';
 
-  spacer.appendChild(slot);
-  body.appendChild(spacer);
-  body.style.paddingBottom = tp + 'px';
-  col.appendChild(body);
-  return col;
+  const lbl = document.createElement('div');
+  lbl.className = 'champion-label';
+  lbl.textContent = '🏆 Champion';
+
+  wrap.appendChild(slot);
+  wrap.appendChild(lbl);
+  return wrap;
 }
 
 // ================================================================
@@ -1022,33 +1049,29 @@ function drawConnectors() {
 
   rounds.forEach((matches, r) => {
     const nextR = r + 1;
+    if (nextR >= rounds.length) return;
 
-    // Connect each match to next-round match
-    if (nextR < rounds.length) {
-      matches.forEach((match, idx) => {
-        const matchEl = bracket.querySelector(`.match[data-r="${r}"][data-m="${idx}"]`);
-        if (!matchEl) return;
-        const mr = rel(matchEl);
+    const half = matches.length / 2;
 
-        const nextMatchEl = bracket.querySelector(`.match[data-r="${nextR}"][data-m="${Math.floor(idx/2)}"]`);
-        if (!nextMatchEl) return;
-        const nr = rel(nextMatchEl);
+    matches.forEach((match, idx) => {
+      const matchEl = bracket.querySelector(`.match[data-r="${r}"][data-m="${idx}"]`);
+      if (!matchEl) return;
+      const mr = rel(matchEl);
 
+      const nextIdx = Math.floor(idx / 2);
+      const nextMatchEl = bracket.querySelector(`.match[data-r="${nextR}"][data-m="${nextIdx}"]`);
+      if (!nextMatchEl) return;
+      const nr = rel(nextMatchEl);
+
+      const isRight = idx >= half;
+      if (!isRight) {
+        // Left side: connect right edge → left edge of inner round
         line(mr.right, mr.cy, nr.left, nr.cy, match.winner != null);
-      });
-    }
-
-    // Connect final match to winner slot
-    if (nextR === rounds.length) {
-      const finalEl = bracket.querySelector(`.match[data-r="${r}"][data-m="0"]`);
-      const winnerSlot = document.getElementById('winner-display-slot');
-      if (finalEl && winnerSlot) {
-        const fr = rel(finalEl);
-        const wr = rel(winnerSlot);
-        const match = rounds[r][0];
-        line(fr.right, fr.cy, wr.left, wr.cy, match.winner != null);
+      } else {
+        // Right side: connect left edge → right edge of inner round
+        line(mr.left, mr.cy, nr.right, nr.cy, match.winner != null);
       }
-    }
+    });
   });
 
   // Size SVG to bracket content
