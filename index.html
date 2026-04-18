@@ -839,9 +839,12 @@ function renderBracket() {
   center.className = 'bracket-center';
   center.appendChild(makeWinnerSlot());
   const CHAMP_SLOT_H = 82;
-  const EXTRA_FINAL_OFFSET = 144; // ~1.5in extra spacing to push final down
-  const semiPad = finalR > 0 ? topPad(finalR - 1) : 0;
-  const gapH = Math.max(8, semiPad - CHAMP_SLOT_H + EXTRA_FINAL_OFFSET);
+  // Position the final match at the midpoint between the semifinal and
+  // quarterfinal y-levels so it sits visually between those two rows.
+  const semiY = finalR > 0 ? topPad(finalR - 1) : 0;
+  const qfY   = finalR > 1 ? topPad(finalR - 2) : 0;
+  const midY  = (semiY + qfY) / 2;
+  const gapH  = Math.max(8, midY - CHAMP_SLOT_H);
   const centerGap = document.createElement('div');
   centerGap.style.height = gapH + 'px';
   center.appendChild(centerGap);
