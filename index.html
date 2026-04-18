@@ -932,9 +932,37 @@ function makeWinnerCol() {
 // ================================================================
 // PICK WINNER
 // ================================================================
+
+// Clear a song from all downstream matches it was propagated into
+function clearDownstream(song, r, idx) {
+  const nextR = r + 1;
+  if (nextR >= bracketData.rounds.length) return;
+  const nextMatch = bracketData.rounds[nextR][Math.floor(idx / 2)];
+  const slot = idx % 2 === 0 ? 'song1' : 'song2';
+  if (nextMatch[slot]?.id !== song.id) return;
+  nextMatch[slot] = null;
+  if (nextMatch.winner?.id === song.id) {
+    clearDownstream(song, nextR, Math.floor(idx / 2));
+    nextMatch.winner = null;
+  }
+}
+
 function pick(r, idx, song) {
   const match = bracketData.rounds[r][idx];
-  if (match.winner || !match.song1 || !match.song2) return;
+  if (!match.song1 || !match.song2) return;
+
+  // Clicking the current winner deselects it
+  if (match.winner?.id === song.id) {
+    clearDownstream(song, r, idx);
+    match.winner = null;
+    renderBracket();
+    return;
+  }
+
+  // Clicking the other song when a winner exists: undo old, pick new
+  if (match.winner) {
+    clearDownstream(match.winner, r, idx);
+  }
 
   match.winner = song;
 
@@ -945,7 +973,6 @@ function pick(r, idx, song) {
     else               nextMatch.song2 = song;
   }
 
-  // Re-render and check for champion
   renderBracket();
 
   const final = bracketData.rounds[bracketData.rounds.length - 1][0];
