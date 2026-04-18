@@ -892,6 +892,7 @@ function makeSlot(song, match, slotNum, r, idx) {
 
   if (match.winner) {
     slot.classList.add(match.winner.id === song.id ? 'winner' : 'loser');
+    slot.addEventListener('click', () => pick(r, idx, song));
   } else if (match.song1 && match.song2) {
     slot.addEventListener('click', () => pick(r, idx, song));
   } else {
