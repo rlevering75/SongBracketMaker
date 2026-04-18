@@ -1142,7 +1142,6 @@ async function resolveSpotifyOembed(url) {
     const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`);
     if (!res.ok) return null;
     const data = await res.json();
-    // oEmbed title is the track name; thumbnail_url is album art
     return {
       id: 'spotify-' + url.split('/').pop(),
       name: data.title,
@@ -1152,6 +1151,24 @@ async function resolveSpotifyOembed(url) {
   } catch {
     return null;
   }
+}
+
+// Resolve URLs in batches to avoid rate limiting
+async function batchResolveOembed(urls, onProgress) {
+  const CONCURRENCY = 8;
+  const results = new Array(urls.length).fill(null);
+  let next = 0;
+
+  async function worker() {
+    while (next < urls.length) {
+      const i = next++;
+      results[i] = await resolveSpotifyOembed(urls[i]);
+      if (onProgress) onProgress(results.filter(Boolean).length, urls.length);
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  return results;
 }
 
 async function onPasteInput() {
@@ -1185,13 +1202,15 @@ async function onPasteInput() {
     }
   });
 
-  // If there are Spotify URLs, resolve them via oEmbed
+  // If there are Spotify URLs, resolve them via oEmbed (batched to avoid rate limiting)
   if (spotifyUrls.length > 0) {
-    countEl.textContent = `Resolving ${spotifyUrls.length} Spotify link${spotifyUrls.length > 1 ? 's' : ''}…`;
+    countEl.textContent = `Resolving 0 / ${spotifyUrls.length}…`;
     countEl.className = 'parse-count';
     btn.disabled = true;
 
-    const resolved = await Promise.all(spotifyUrls.map(resolveSpotifyOembed));
+    const resolved = await batchResolveOembed(spotifyUrls, (done, total) => {
+      countEl.textContent = `Resolving ${done} / ${total}…`;
+    });
     const validResolved = resolved.filter(Boolean);
 
     resolvedPasteSongs = [...textSongs.map((s, i) => ({
