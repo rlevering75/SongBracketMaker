@@ -875,7 +875,9 @@ function makeRoundEl(matches, r, numRounds, isRight, startIdx) {
   const body = document.createElement('div');
   body.className = 'round-body';
 
-  const tp = topPad(r);
+  // Final round sits at top of center column — no vertical centering padding
+  const isFinal = matches.length === 1 && startIdx === 0 && !isRight;
+  const tp = isFinal ? 0 : topPad(r);
   const mg = matchGap(r);
 
   matches.forEach((match, i) => {
@@ -889,7 +891,7 @@ function makeRoundEl(matches, r, numRounds, isRight, startIdx) {
     body.appendChild(spacer);
   });
 
-  body.style.paddingBottom = tp + 'px';
+  body.style.paddingBottom = isFinal ? '0' : tp + 'px';
   roundEl.appendChild(body);
   return roundEl;
 }
