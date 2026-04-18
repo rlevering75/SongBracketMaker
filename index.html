@@ -827,7 +827,9 @@ function renderBracket() {
   for (let r = 0; r < finalR; r++) {
     if (r > 0) leftHalf.appendChild(makeConnectorSpacer());
     const half = rounds[r].length / 2;
-    leftHalf.appendChild(makeRoundEl(rounds[r].slice(0, half), r, numRounds, false, 0));
+    const el = makeRoundEl(rounds[r].slice(0, half), r, numRounds, false, 0);
+    if (r === finalR - 1) el.dataset.semiLeft = '1';
+    leftHalf.appendChild(el);
   }
   container.appendChild(leftHalf);
 
@@ -836,6 +838,13 @@ function renderBracket() {
   const center = document.createElement('div');
   center.className = 'bracket-center';
   center.appendChild(makeWinnerSlot());
+  const CHAMP_SLOT_H = 82;
+  const EXTRA_FINAL_OFFSET = 144; // ~1.5in extra spacing to push final down
+  const semiPad = finalR > 0 ? topPad(finalR - 1) : 0;
+  const gapH = Math.max(8, semiPad - CHAMP_SLOT_H + EXTRA_FINAL_OFFSET);
+  const centerGap = document.createElement('div');
+  centerGap.style.height = gapH + 'px';
+  center.appendChild(centerGap);
   center.appendChild(makeRoundEl(rounds[finalR], finalR, numRounds, false, 0));
   container.appendChild(center);
   container.appendChild(makeConnectorSpacer());
@@ -875,9 +884,11 @@ function makeRoundEl(matches, r, numRounds, isRight, startIdx) {
   const body = document.createElement('div');
   body.className = 'round-body';
 
-  // Final round sits at top of center column — no vertical centering padding
-  const isFinal = matches.length === 1 && startIdx === 0 && !isRight;
-  const tp = isFinal ? 0 : topPad(r);
+  const isActualFinal = r === numRounds - 1;
+  // Finals column uses no top-padding (it's centered by the center column layout).
+  // All other rounds — including single-match semis — use topPad(r) so the match
+  // lands at the correct vertical position relative to the tallest (R0) column.
+  const tp = isActualFinal ? 0 : topPad(r);
   const mg = matchGap(r);
 
   matches.forEach((match, i) => {
@@ -885,14 +896,13 @@ function makeRoundEl(matches, r, numRounds, isRight, startIdx) {
     const spacer = document.createElement('div');
     spacer.className = 'match-spacer';
     spacer.style.paddingTop = (i === 0 ? tp : mg) + 'px';
-
-    const matchEl = makeMatchEl(match, r, idx, isRight);
-    spacer.appendChild(matchEl);
+    spacer.appendChild(makeMatchEl(match, r, idx, isRight));
     body.appendChild(spacer);
   });
 
-  body.style.paddingBottom = isFinal ? '0' : tp + 'px';
+  body.style.paddingBottom = tp + 'px';
   roundEl.appendChild(body);
+
   return roundEl;
 }
 
